@@ -2,9 +2,10 @@ import os
 import imageio
 
 #import cv2
-from skimage.filters import threshold_otsu
+from skimage.filters import threshold_otsu, rank
 from skimage.segmentation import watershed
 from skimage.measure import label
+from skimage.morphology import disk
 
 import matplotlib.pyplot as plt
 
@@ -24,28 +25,34 @@ dna = imageio.imread(os.path.join(img_folder, ID + '-DNA.tif'))
 ph3 = imageio.imread(os.path.join(img_folder, ID + '-pH3.tif'))
 
 T = threshold_otsu(dna)
-dna_T = dna > T
-connected_components = label(dna_T)
+markers = dna > T
+markers = label(markers)
 
-fig, axes = plt.subplots(ncols=3, figsize=(8, 2.5))
+gradient = rank.gradient(actin, disk(5))
+seg = watershed(gradient, markers)
+
+
+fig, axes = plt.subplots(ncols=3, figsize=(15,5))
 ax = axes.ravel()
 ax[0] = plt.subplot(1, 3, 1)
 ax[1] = plt.subplot(1, 3, 2)
 ax[2] = plt.subplot(1, 3, 3, sharex=ax[0], sharey=ax[0])
 
-ax[0].imshow(dna, cmap=plt.cm.gray)
+ax[0].imshow(actin, cmap=plt.cm.gray)
 ax[0].set_title('Original')
 ax[0].axis('off')
 
-ax[1].imshow(dna_T, cmap=plt.cm.gray)
-ax[1].set_title('Otsu')
+ax[1].imshow(markers, cmap=plt.cm.jet)
+ax[1].set_title('seeds')
 ax[0].axis('off')
 
-ax[2].imshow(connected_components, cmap=plt.cm.jet)
-ax[2].set_title('connected components')
+ax[2].imshow(seg, cmap=plt.cm.jet)
+ax[2].set_title('segmentation')
 ax[2].axis('off')
 
 plt.show()
+
+
 '''
 for ID in IDs:
     actin = imageio.imread(os.path.join(img_folder, ID + '-actin.tif'))
