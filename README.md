@@ -1,17 +1,11 @@
-# Technical test report
+# Instruction for running the code
 
-## Objective
+I didn't have enough time to figure out how to write a proper Makefile, so please run the following code to reproduce the results.
 
-The objective of this project is to implement a watershed-based segmentation algorithm to segment cell cytoplasm (based on actin) given the corresponding nucleus. The project is a part of the analysis pipeline that retrieves and quantitatively characterizes morphologies in Human HT29 colon-cancer cells.
+conda create --name technical_test_xiaofan --file requirements.txt
 
-## Methods
+conda activate technical_test_xiaofan
 
-
-
-## Results
-
-
-
-## Problems and future work
+python main.py
 
 
