@@ -1,20 +1,17 @@
 # basic libraies
 import os 
-import imageio
+import imageio.v2 as imageio
 import numpy as np
 
 # libraies for image processing and watershed segmentation
-from skimage.filters import threshold_otsu, rank, gaussian
+from skimage.filters import threshold_otsu, rank, gaussian, unsharp_mask
 from skimage.segmentation import watershed
 from skimage.measure import label
-from skimage.morphology import disk, binary_opening, binary_closing
+from skimage.morphology import disk, binary_closing
 from skimage.color import label2rgb
 from skimage.util import img_as_ubyte
-from skimage import exposure
+from skimage.exposure import equalize_adapthist, rescale_intensity
 from scipy.ndimage import binary_fill_holes
-
-# library for plotting
-import matplotlib.pyplot as plt
 
 
 def seeded_watershed(actin, dna):
@@ -22,109 +19,56 @@ def seeded_watershed(actin, dna):
     function to implement the seeded watershed segmentation given a pair of actin and DNA images.
     '''
 
-    # define seeds for the seeded watershed using nucleus
+    # segment nucleus to be seeds for seeded watershed segmentation
     T_dna = threshold_otsu(dna)
     dna_bin = dna > T_dna
-    seeds = label(binary_opening(dna_bin, disk(3)))
+    seeds = label(dna_bin)
 
     # using morphological opreations to define the background in the actin image
     global_thresh = threshold_otsu(actin)
     actin_bin = actin > global_thresh
-    actin_bin = binary_closing(gaussian(actin_bin, 1), disk(5))
+    actin_bin = binary_closing(gaussian(actin_bin, 1), disk(1))
     actin_bin = binary_fill_holes(actin_bin)
     background = np.max(seeds) + 1
     seeds[actin_bin == 0] = background
 
-    # implement the watershed on the gradient image of actin and remove the background
-    gradient = rank.gradient(actin, disk(5))
+    # implement the watershed on the gradient image and remove the background
+    actin_sharpened = unsharp_mask(actin, radius=5, amount=2) # sharpen the image to better find local maximum in gradient
+    gradient = rank.gradient(img_as_ubyte(actin_sharpened), disk(3))
     seg = watershed(gradient, seeds)
     seg[seg == background] = 0
 
-    # the two outputs are a image-label overlay (for visualization) and a label map itself
-    image_label_overlay = label2rgb(seg, image=exposure.rescale_intensity(actin), alpha = 0.1, bg_label=0)
+    image_label_overlay = label2rgb(seg, image=actin, alpha = 0.2, bg_label=0)
     seg_rgb = label2rgb(seg, image = None)
 
     return image_label_overlay, seg_rgb
 
 
-# define imput/output paths
-img_folder = 'Images'
-out_folder = 'Segmentation'
-if not os.path.exists(out_folder):
-    os.mkdir(out_folder)
+if __name__ == "__main__":
 
+    # define imput/output paths
+    img_folder = 'Images'
+    out_folder = 'Segmentation'
+    if not os.path.exists(out_folder):
+        os.mkdir(out_folder)
 
-# extract unique sample IDs
-IDs = [f.split('-')[0] for f in os.listdir(img_folder)]
-IDs = list(set(IDs))
+    # extract unique sample IDs
+    IDs = [f.split('-')[0] for f in os.listdir(img_folder)]
+    IDs = list(set(IDs))
 
-for ID in IDs:
-    # read two corresponding images for a given ID
-    print(f'segmenting (ID): {ID}')
-    actin = imageio.imread(os.path.join(img_folder, ID + '-actin.tif'))
-    dna = imageio.imread(os.path.join(img_folder, ID + '-DNA.tif'))
+    for ID in IDs:
+        # read actin and DNA images for a given ID
+        print(f'segmenting (ID): {ID}')
+        actin = imageio.imread(os.path.join(img_folder, ID + '-actin.tif'))
+        dna = imageio.imread(os.path.join(img_folder, ID + '-DNA.tif'))
 
-    # apply the segmentation function
-    image_label_overlay, seg_rgb = seeded_watershed(actin, dna)
+        # normalize and enhance the contrast
+        actin = equalize_adapthist(rescale_intensity(actin))
+        dna = equalize_adapthist(rescale_intensity(dna))    
 
-    imageio.imwrite(os.path.join(out_folder, ID + '_overlay.tif'), img_as_ubyte(image_label_overlay))
-    imageio.imwrite(os.path.join(out_folder, ID + '_seg.tif'), img_as_ubyte(seg_rgb))
+        # apply the segmentation function
+        image_label_overlay, seg_rgb = seeded_watershed(actin, dna)
 
-
-'''
-ID = '00735'
-
-actin = imageio.imread(os.path.join(img_folder, ID + '-actin.tif'))
-dna = imageio.imread(os.path.join(img_folder, ID + '-DNA.tif'))
-ph3 = imageio.imread(os.path.join(img_folder, ID + '-pH3.tif'))
-
-# define seeds for the seeded watershed using nucleus
-T_dna = threshold_otsu(dna)
-dna_bin = dna > T_dna
-seeds = label(binary_opening(dna_bin, disk(3)))
-
-# using morphological opreations to define the background in the actin image
-global_thresh = threshold_otsu(actin)
-actin_bin = actin > global_thresh
-actin_bin = binary_closing(gaussian(actin_bin, 1), disk(5))
-actin_bin = binary_fill_holes(actin_bin)
-background = np.max(seeds) + 1
-seeds[actin_bin == 0] = background
-
-# implement the watershed on the gradient image and remove the background
-gradient = rank.gradient(actin, disk(5))
-seg = watershed(gradient, seeds)
-seg[seg == background] = 0
-
-image_label_overlay = label2rgb(seg, image=exposure.rescale_intensity(actin), alpha = 0.1, bg_label=0)
-seg_rgb = label2rgb(seg, image = None)
-
-# results visualization
-fig, axes = plt.subplots(ncols=4, figsize=(18,5))
-ax = axes.ravel()
-ax[0] = plt.subplot(1, 4, 1)
-ax[1] = plt.subplot(1, 4, 2)
-ax[2] = plt.subplot(1, 4, 3)
-ax[3] = plt.subplot(1, 4, 4)
-
-ax[0].imshow(actin, cmap=plt.cm.gray)
-ax[0].set_title('Original')
-
-ax[1].imshow(seeds, cmap=plt.cm.gray)   
-ax[1].set_title('seeds')
-
-ax[2].imshow(seg_rgb, cmap=plt.cm.jet)
-ax[2].set_title('segmentation')
-
-ax[3].imshow(image_label_overlay)
-ax[3].set_title('segmentation')
-
-plt.show()
-'''
-
-
-
-### for visualization only
-#for f in os.listdir(img_folder):
-#    imageio.imwrite(os.path.join('Visualization', f.replace('tif', 'png')), cv2.normalize(imageio.imread(os.path.join(img_folder, f)), None, 0 ,255 ,cv2.NORM_MINMAX, cv2.CV_8UC3))
-
+        # save output images
+        imageio.imwrite(os.path.join(out_folder, ID + '_overlay.tif'), img_as_ubyte(image_label_overlay))
+        imageio.imwrite(os.path.join(out_folder, ID + '_seg.tif'), img_as_ubyte(seg_rgb))

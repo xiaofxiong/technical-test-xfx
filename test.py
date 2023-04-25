@@ -1,6 +1,6 @@
 # basic libraies
 import os 
-import imageio
+import imageio.v2 as imageio
 import numpy as np
 
 # libraies for image processing and watershed segmentation
@@ -24,7 +24,7 @@ out_folder = 'Segmentation'
 if not os.path.exists(out_folder):
     os.mkdir(out_folder)
 
-ID = '19466'
+ID = '13570'
 
 actin = imageio.imread(os.path.join(img_folder, ID + '-actin.tif'))
 dna = imageio.imread(os.path.join(img_folder, ID + '-DNA.tif'))
@@ -56,8 +56,9 @@ seeds[actin_bin == 0] = background
 #     labelmap[intensity_img > local_min] = 0
 #     markers += labelmap.reshape(actin.shape)
 
+# sharpen the image to better find local maximum in gradient
 actin_sharpened = unsharp_mask(actin, radius=5, amount=2)
-gradient = rank.gradient(actin_sharpened, disk(3))
+gradient = rank.gradient(img_as_ubyte(actin_sharpened), disk(3))
 seg = watershed(gradient, seeds)
 seg[seg == background] = 0
 
@@ -85,7 +86,6 @@ ax[3].imshow(seg_rgb)
 ax[3].set_title('segmentation')
 
 plt.show()
-
 
 
 ### for visualization only
